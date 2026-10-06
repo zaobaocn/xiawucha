@@ -1,0 +1,58 @@
+name: Xiawucha
+
+# 每小时跑一次（UTC 第 17 分钟，避开整点高峰）；也支持手动触发调试
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+# push sent.db 回仓库需要写权限
+permissions:
+  contents: write
+
+# 同一时间只跑一个实例，避免并发写库冲突
+concurrency:
+  group: xiawucha
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL: ${{ secrets.CHANNEL }}
+          TELEGRAPH_TOKEN: ${{ secrets.TELEGRAPH_TOKEN }}
+        run: python xiawucha.py
+
+      # 把去重库写回仓库：跨运行持久化 + 让仓库保持提交活动
+      # （避免 GitHub 60 天无活动自动停用定时 workflow）
+      - name: Push sent.db back
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add sent.db
+          git commit -m 'update sent.db [skip ci]' || exit 0
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 69
