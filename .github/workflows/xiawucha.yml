@@ -3,7 +3,7 @@ name: Xiawucha
 # 每小时跑一次（UTC 第 17 分钟，避开整点高峰）；也支持手动触发调试
 on:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 # push sent.db 回仓库需要写权限
