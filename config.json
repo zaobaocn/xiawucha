@@ -1,0 +1,11 @@
+{
+"db_keep_days": 30, 
+"img_proxy": "https://images.weserv.nl/?url={url}", 
+"max_age_hours": 72, 
+"max_per_run": 10, 
+"sleep_between_articles": 5, 
+"sources": [
+{"list_url": "https://www.zaobao.com/keywords/xia-wu-cha", "name": "下午察"}, 
+{"list_url": "https://www.zaobao.com/forum/zaodian", "name": "中国早点"}
+], 
+"user_agent": "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"}

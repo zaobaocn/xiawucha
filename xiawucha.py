@@ -7,10 +7,9 @@
   1. 新建仓库，放入本目录所有文件
   2. 仓库 Settings → Secrets and variables → Actions，新建：
        BOT_TOKEN（必填，@BotFather 获取，Bot 须为频道管理员）
-       TELEGRAPH_TOKEN（可选；留空则首次运行自动创建，日志里会打印 token，
-       再回来填入 Secrets）
-  3. config.json 里填好 channel（频道 chat_id 或 @用户名）
-  4. Actions 页手动 Run 一次验证，之后每小时自动跑
+       CHANNEL（必填，频道 chat_id 或 @用户名）
+       TELEGRAPH_TOKEN（必填，Telegraph 账号 token，自行保管）
+  3. Actions 页手动 Run 一次验证，之后每小时自动跑
 
 抓取 UA 用 bingbot（实测可绕过 zaobao.com 对非中国 IP 的地理跳转，
 站点匹配小写 "bingbot/" 子串）。
@@ -43,19 +42,16 @@ from urllib.parse import urljoin, urlparse, quote
 BASE_DIR = Path(__file__).resolve().parent
 DB_FILE = BASE_DIR / "sent.db"
 LOG_FILE = BASE_DIR / "xiawucha.log"
-TOKEN_FILE = BASE_DIR / "telegraph_token.txt"
 CONFIG_FILE = BASE_DIR / "config.json"
 
 # ============================ 配置文件 ============================
 # 非密钥配置在脚本同目录的 config.json 里改。
-# token 类走环境变量（GitHub Secrets），不在配置文件里放密钥：
+# token/频道 ID 走环境变量（GitHub Secrets），不在配置文件或仓库里放密钥：
 #   BOT_TOKEN        必填（@BotFather 获取；Bot 须为目标频道管理员）
-#   TELEGRAPH_TOKEN  可选；留空则首次运行自动创建并打印到日志
-# 首次运行会自动生成 config.json 模板，填好 channel 后重跑。
+#   TELEGRAPH_TOKEN  必填（Telegraph 账号 token，自行保管好）
+#   CHANNEL          必填（频道 chat_id 或 @用户名，如 @xwucha）
+# 首次运行会自动生成 config.json 模板，直接可用。
 DEFAULT_CONFIG = {
-    # 推送频道：所有栏目的文章都发到这一个频道
-    # （频道的 chat_id 或 @用户名，如 @my_channel）【必填】
-    "channel": "@your_channel",
     # 抓取 UA：bingbot 可绕过 zaobao.com 对非中国 IP 的地理跳转
     # （实测：站点匹配小写 "bingbot/" 子串，勿改大小写）
     "user_agent": ("Mozilla/5.0 (compatible; bingbot/2.0; "
@@ -88,7 +84,7 @@ def load_config():
             json.dumps(DEFAULT_CONFIG, ensure_ascii=False, indent=2),
             encoding="utf-8")
         print(f"已生成默认配置文件：{CONFIG_FILE}")
-        print("请打开 config.json 填写 channel 后重新运行。")
+        print("token 与频道请用环境变量（GitHub Secrets）配置后重新运行。")
         sys.exit(2)
     try:
         cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
@@ -101,10 +97,10 @@ def load_config():
 
 
 _cfg = load_config()
-# token 走环境变量（GitHub Secrets），不在 config.json 里放密钥
+# token 与频道走环境变量（GitHub Secrets），不在 config.json 里放密钥
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 TELEGRAPH_TOKEN = os.environ.get("TELEGRAPH_TOKEN", "").strip()
-CHANNEL = _cfg["channel"]
+CHANNEL = os.environ.get("CHANNEL", "").strip()
 IMG_PROXY = _cfg["img_proxy"]
 SOURCES = _cfg["sources"]
 MAX_AGE_HOURS = _cfg["max_age_hours"]
@@ -545,24 +541,11 @@ def api_post(method, data, timeout=90, retries=3):
 
 
 def get_telegraph_token():
-    if TELEGRAPH_TOKEN.strip():
-        return TELEGRAPH_TOKEN.strip()
-    if TOKEN_FILE.exists():
-        token = TOKEN_FILE.read_text(encoding="utf-8").strip()
-        if token:
-            return token
-    logging.info("未配置 Telegraph token，正在自动创建账号…")
-    r = api_post("createAccount",
-                 {"short_name": "xwucha", "author_name": "下午茶"},
-                 timeout=45)
-    TOKEN_FILE.write_text(r["access_token"], encoding="utf-8")
-    logging.info(f"账号已创建，token 已保存到 {TOKEN_FILE}")
-    logging.warning("=" * 60)
-    logging.warning("请把下面这行 token 存入仓库 Secrets 的 TELEGRAPH_TOKEN，")
-    logging.warning("否则下次运行会重新创建账号（已发布页面不受影响）：")
-    logging.warning(r["access_token"])
-    logging.warning("=" * 60)
-    return r["access_token"]
+    # token 只从 Secrets 取，不在仓库里存文件、也不自动创建
+    if not TELEGRAPH_TOKEN:
+        logging.error("环境变量 TELEGRAPH_TOKEN 未设置（仓库 Secrets 里新建 TELEGRAPH_TOKEN），退出")
+        sys.exit(2)
+    return TELEGRAPH_TOKEN
 
 
 def derive_slug_title(source_url):
@@ -721,8 +704,8 @@ def main():
     if not sources:
         logging.error(f"未找到栏目：{args.source}")
         sys.exit(2)
-    if "@your_" in CHANNEL or not CHANNEL.strip():
-        logging.error("CONFIG 中 CHANNEL 未配置，退出")
+    if not CHANNEL:
+        logging.error("环境变量 CHANNEL 未设置（仓库 Secrets 里新建 CHANNEL，填频道 chat_id 或 @用户名），退出")
         sys.exit(2)
 
     token = get_telegraph_token()
